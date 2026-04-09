@@ -1,0 +1,75 @@
+tasks: 
+  - name: prompt_preparation
+    subtasks: 
+      - name: zero_shot_en_to_fr
+        mode: 0-shot
+        src_lang: en
+        tgt_lang: fr
+        src_path: "/home/ptsolaki/scratch/matos_pipeline/source/en/accepted/"
+        tgt_path: "/home/ptsolaki/scratch/matos_pipeline/prompts/${model_name}/0-shot/en_to_fr/"
+      - name: zero_shot_fr_to_en
+        mode: 0-shot
+        src_lang: fr
+        tgt_lang: en
+        src_path: "/home/ptsolaki/scratch/matos_pipeline/source/fr/accepted/"
+        tgt_path: "/home/ptsolaki/scratch/matos_pipeline/prompts/${model_name}/0-shot/fr_to_en"
+      - name: one_shot_en_to_fr 
+        mode: 1-shot 
+        src_lang: en
+        tgt_lang: fr 
+        src_path: "/home/ptsolaki/scratch/matos_pipeline/source/en/accepted/" 
+        tgt_path: "/home/ptsolaki/scratch/matos_pipeline/prompts/${model_name}/1-shot/en_to_fr"
+      - name: one_shot_fr_to_en 
+        mode: 1-shot 
+        src_lang: fr 
+        tgt_lang: en 
+        src_path: "/home/ptsolaki/scratch/matos_pipeline/source/fr/accepted/" 
+        tgt_path: "/home/ptsolaki/scratch/matos_pipeline/prompts/${model_name}/1-shot/fr_to_en" 
+      - name: two_shot_en_to_fr 
+        mode: 2-shot
+        src_lang: en 
+        tgt_lang: fr 
+        src_path: "/home/ptsolaki/scratch/matos_pipeline/source/en/accepted/" 
+        tgt_path: "/home/ptsolaki/scratch/matos_pipeline/prompts/${model_name}/2-shot/en_to_fr"
+      - name: two_shot_fr_to_en 
+        mode: 2-shot 
+        src_lang: fr 
+        tgt_lang: en 
+        src_path: "/home/ptsolaki/scratch/matos_pipeline/source/fr/accepted/" 
+        tgt_path: "/home/ptsolaki/scratch/matos_pipeline/prompts/${model_name}/2-shot/fr_to_en" 
+
+
+# we comment some arguments as we use their default values  2024-11-26
+models:
+  - name: EuroLLM-9B-Instruct  
+    template: "${src_lang_full}: ${src_txt}\n${tgt_lang_full}: "
+    llm_arguments:
+      model: utter-project/EuroLLM-9B-Instruct  
+      tokenizer_mode: auto
+      skip_tokenizer_init: false
+      trust_remote_code: true
+      tensor_parallel_size: 1
+      dtype: bfloat16
+
+    sampling_arguments:
+      n: 1
+      # best_of: 1
+      presence_penalty: 0.0
+      frequency_penalty: 0.0
+      repetition_penalty: 1.0
+      temperature: 0.6
+      top_p: 0.9
+      top_k: -1
+      min_p: 0.0
+      seed: null
+      stop: 
+      - "</s>"
+      stop_token_ids: null
+      ignore_eos: false
+      max_tokens: 1024
+      min_tokens: 0
+      logprobs: null
+      prompt_logprobs: null
+      detokenize: true
+      skip_special_tokens: true
+      spaces_between_special_tokens: true
