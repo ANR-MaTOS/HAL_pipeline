@@ -14,6 +14,7 @@ from string import Template
 from datetime import date
 from datetime import timedelta
 from demonstrations import get_examples
+import re 
 
 today = date.today() 
 yesterday = today - timedelta(days = 1)
@@ -36,7 +37,7 @@ def make_prompt(src, template_string, src_lang, tgt_lang, num_examples=0, tokeni
             for d in demonstrations: 
                 d_src = d[src_lang]
                 d_tgt = d[tgt_lang]
-                messages.append({"role": "user", "content": d_src})
+                messages.append({"role": "user", "content": template.safe_substitute(src_lang_full=src_lang_full, src_txt=d_src, tgt_lang_full=tgt_lang_full)})
                 messages.append({"role": "assistant", "content": d_tgt})
         messages.append({"role": "user", "content": prompt}) 
         if no_sys_message:
@@ -44,7 +45,7 @@ def make_prompt(src, template_string, src_lang, tgt_lang, num_examples=0, tokeni
                 for d in demonstrations: 
                     d_src = d[src_lang]
                     d_tgt = d[tgt_lang]
-                    messages.append({"role": "user", "content": d_src})
+                    messages.append({"role": "user", "content": template.safe_substitute(src_lang_full=src_lang_full, src_txt=d_src, tgt_lang_full=tgt_lang_full)})
                     messages.append({"role": "assistant", "content": d_tgt})
             messages.append({"role": "user", "content": prompt})
         prompt = tokenizer.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
@@ -62,8 +63,9 @@ def make_prompts_for_inference(src_path, src_lang, tgt_lang, template_string, mo
             src_list.append({"docid":entry["docid"], "src_abstract":entry[abstract_field][0]})
     res = []
     for src in src_list:
-        docid = src.get("docid")
-        abstract_s = src.get("src_abstract")
+        docid = src["docid"]
+        abstract_s = src["src_abstract"]
+
         if mode == "0-shot":
             num_examples = 0 
         elif mode == "1-shot":
@@ -71,6 +73,7 @@ def make_prompts_for_inference(src_path, src_lang, tgt_lang, template_string, mo
         elif mode == "2-shot": 
             num_examples = 2
         print(f"Making {mode} {src_lang}->{tgt_lang} prompt for {docid}")
+
         prompt = make_prompt(abstract_s, template_string, src_lang, tgt_lang, num_examples = num_examples, tokenizer = tokenizer, no_sys_message = no_sys_message)
         if prompt is not None: 
             src_tokens = tokenizer.encode(abstract_s)
