@@ -37,7 +37,26 @@ tasks:
         tgt_lang: en 
         src_path: "/home/ptsolaki/scratch/matos_pipeline/source/fr/accepted/" 
         tgt_path: "/home/ptsolaki/scratch/matos_pipeline/prompts/${model_name}/2-shot/fr_to_en" 
-
+  - name: mt
+    subtasks: 
+      - name: en_to_fr_translation
+        src_lang: en 
+        tgt_lang: fr
+        modes: 
+          - 0-shot
+          - 1-shot
+          - 2-shot
+        src_path: "/home/ptsolaki/scratch/matos_pipeline/prompts/${model_name}/${mode}/en_to_fr"
+        tgt_path: "/home/ptsolaki/scratch/matos_pipeline/target/${model_name}/${mode}/fr"
+      - name: fr_to_en_translation 
+        src_lang: fr
+        tgt_lang: en
+        modes: 
+          - 0-shot
+          - 1-shot
+          - 2-shot
+        src_path: "/home/ptsolaki/scratch/matos_pipeline/prompts/${model_name}/${mode}/fr_to_en"
+        tgt_path: "/home/ptsolaki/scratch/matos_pipeline/target/${model_name}/${mode}/en"
 
 # we comment some arguments as we use their default values  2024-11-26
 models:
