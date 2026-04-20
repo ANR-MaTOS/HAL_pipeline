@@ -15,6 +15,7 @@ from datetime import date
 from datetime import timedelta
 from demonstrations import get_examples
 import re 
+from transformers import AutoConfig
 
 today = date.today() 
 yesterday = today - timedelta(days = 1)
@@ -52,7 +53,7 @@ def make_prompt(src, template_string, src_lang, tgt_lang, num_examples=0, tokeni
         return prompt 
     return None 
 
-def make_prompts_for_inference(src_path, src_lang, tgt_lang, template_string, mode = "0-shot", tokenizer = None, no_sys_message = False):    
+def make_prompts_for_inference(src_path, src_lang, tgt_lang, template_string, max_len, mode = "0-shot", tokenizer = None, no_sys_message = False):    
     datefile = f"checked_{src_lang}_{yesterday.day:02d}_{yesterday.month:02d}_{yesterday.year}.json"
     with open(Path(src_path) / datefile, "r", encoding="utf-8") as f: 
         data = json.load(f) 
@@ -80,7 +81,7 @@ def make_prompts_for_inference(src_path, src_lang, tgt_lang, template_string, mo
             src_len = len(src_tokens) 
             prompt_tokens = tokenizer.encode(prompt)
             prompt_len = len(prompt_tokens)
-            max_len = tokenizer.model_max_length
+            # max_len = tokenizer.model_max_length
             status = "standard" if prompt_len <= max_len else "too_long"
             res.append({"docid":docid, "src_abstract":abstract_s, "src_len":src_len, "prompt":prompt, "prompt_len":prompt_len, "status":status})
     return res
@@ -90,6 +91,9 @@ def main(tasks: List[dict], models: List[dict] = None):
         model_name = model["name"]
         print(model_name)
         tokenizer = AutoTokenizer.from_pretrained(model["llm_arguments"]["model"])   
+        config = AutoConfig.from_pretrained(model["llm_arguments"]["model"])
+        max_len = getattr(config, "max_position_embeddings", None)
+        print("Maximum length:", max_len)
 
         for task in tasks:
             if task.get("name") == "prompt_preparation": 
@@ -111,11 +115,11 @@ def main(tasks: List[dict], models: List[dict] = None):
                     # make prompt
                     if model.get("chat_template", False):
                         instructions = make_prompts_for_inference(
-                            src_path, src_lang, tgt_lang, template_string = model["template"], mode = mode, tokenizer = tokenizer, 
+                            src_path, src_lang, tgt_lang, template_string = model["template"], max_len = max_len, mode = mode, tokenizer = tokenizer, 
                             no_sys_message = model.get("no_sys_message", False))
                     else:
                         instructions = make_prompts_for_inference(
-                            src_path, src_lang, tgt_lang, template_string = model["template"], mode = mode, tokenizer = tokenizer)
+                            src_path, src_lang, tgt_lang, template_string = model["template"], max_len = max_len, mode = mode, tokenizer = tokenizer)
                         
                     prompt_filename = Path(tgt_path) / f"input_{yesterday.day:02d}_{yesterday.month:02d}_{yesterday.year}.json"
                     with open(prompt_filename, "w", encoding="utf-8") as f:
