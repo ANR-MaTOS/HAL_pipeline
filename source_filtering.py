@@ -1,3 +1,5 @@
+from itertools import batched
+import xml.etree.ElementTree as ET
 import fasttext
 import json  
 import re 
@@ -50,6 +52,76 @@ def convert_superscripts(text: str) -> str:
         return content.translate(SUPERSCRIPT_MAP)
     return re.sub(r"<sup>(.*?)</sup>", repl, text)
 
+def normalise_mmultiscripts(match): 
+    def convert_subscripts(text) -> str: 
+        if text == None: 
+            return None
+        return text.translate(SUBSCRIPT_MAP)
+    def convert_superscripts(text) -> str: 
+        if text == None: 
+            return None
+        return text.translate(SUPERSCRIPT_MAP)
+    text = match.group(0)
+    result = ""
+    root = ET.fromstring(text)
+    # mmultiscripts = root.find("mmultiscripts")
+    mmultiscript_tags = [child.tag for child in root]
+    mmultiscript_texts = [child.text for child in root]
+    base = ""
+    if mmultiscript_tags and mmultiscript_tags[0] == "mi": 
+        base = mmultiscript_texts[0]
+    if base and "mprescripts" in mmultiscript_tags: 
+        idx = mmultiscript_tags.index("mprescripts")
+        postsubscripts = []
+        postsuperscripts = []
+        presubscripts = []
+        presuperscripts = []
+        postsubscripts_txt = ""
+        postsuperscripts_txt = "" 
+        presubscripts_txt = "" 
+        presuperscripts_txt = ""
+
+        # get post-script subscript-superscript pairs 
+        postscript_tags = mmultiscript_tags[1:idx]
+        postscript_texts = mmultiscript_texts[1:idx]
+        if len(postscript_texts) % 2 == 0: 
+            for postscript in list(batched(postscript_texts, 2)):
+                postsubscripts.append(postscript[0])
+                postsuperscripts.append(postscript[1])
+            postsubscripts = ["" if i is None else i for i in postsubscripts]
+            postsubscripts_txt = "".join(postsubscripts)
+            postsuperscripts = ["" if i is None else i for i in postsuperscripts] 
+            postsuperscripts_txt = "".join(postsuperscripts)
+                        
+        # get pre-script subscript-superscript pairs 
+        prescript_tags = mmultiscript_tags[idx+1:]
+        prescript_texts = mmultiscript_texts[idx+1:]
+        if len(prescript_texts) % 2 == 0: 
+            for prescript in list(batched(prescript_texts, 2)):
+                presubscripts.append(prescript[0])
+                presuperscripts.append(prescript[1])
+            presubscripts = ["" if i is None else i for i in presubscripts]
+            presubscripts_txt = "".join(presubscripts)
+            presuperscripts = ["" if i is None else i for i in presuperscripts]
+            presuperscripts_txt = "".join(presuperscripts)
+
+        result = convert_subscripts(presubscripts_txt) + convert_superscripts(presuperscripts_txt) + base + convert_subscripts(postsubscripts_txt) + convert_superscripts(postsuperscripts_txt) 
+
+    elif base and "mprescripts" not in mmultiscript_tags: 
+        subscripts = []
+        superscripts = []
+        # get subscript-superscript pairs 
+        if len(mmultiscript_texts[1:]) % 2 == 0: 
+            for postscript in list(batched(mmultiscript_texts[1:], 2)): 
+                subscripts.append(postscript[0])
+                superscripts.append(postscript[1])
+            subscripts = ["" if i is None else i for i in subscripts]
+            superscripts = ["" if i is None else i for i in superscripts]
+            subscripts_txt = "".join(subscripts)
+            superscripts_txt = "".join(superscripts)
+            result = base + convert_subscripts(subscripts_txt) + convert_superscripts(superscripts_txt)            
+    return result  
+
 def normalise_mathml(text): 
     def replace_msup(match):
         mi_content = match.group(1)
@@ -64,7 +136,9 @@ def normalise_mathml(text):
         text = re.sub(r"<msup><mi>(.*)</mi><mn>(.*)</mn></msup>", replace_msup, text)
     if "<msub>"in text: 
         text = re.sub(r"<msub><mi>(.*)</mi><mn>(.*)</mn></msub>", replace_msub, text)
-    text = re.sub(r"<(/)?(mi|mn|msub|msup|mtext)>", "", text)
+    if "<mmultiscripts>" in text: 
+        text = re.sub(r"<mmultiscripts>([\s\S]+?)</mmultiscripts>", normalise_mmultiscripts, text) 
+    text = re.sub(r"<(/)?(math|mi|mn|msub|msup|mtext|mmultiscripts|none|mrow)(/)?>", "", text)
     return text 
 
 def normalise(text:str): 
