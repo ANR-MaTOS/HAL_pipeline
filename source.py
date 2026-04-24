@@ -1,4 +1,5 @@
 from datetime import date, datetime, timedelta
+from html import unescape
 from pathlib import Path
 from source_filtering import get_lang, normalise
 import json 
@@ -61,6 +62,7 @@ def normalise_langid(expected_lang:str, publications:list, langid_threshold=0.8,
     abstract_field = f"{expected_lang}_abstract_s"
     for pub in publications: 
         abstract = pub[abstract_field][0]
+        abstract = unescape(abstract)
         abstract = normalise(abstract)
         pub[abstract_field][0] = abstract 
         abstract_len = len(abstract)
@@ -114,20 +116,3 @@ if __name__=="__main__":
     save_publications(en_rejected, f"source/en/rejected/rejected_en_{datestamp}.json")
     save_publications(fr_accepted, f"source/fr/accepted/checked_fr_{datestamp}.json")
     save_publications(fr_rejected, f"source/fr/rejected/rejected_fr_{datestamp}.json")
-
-
-
-        
-
-
-
-
-
-
-
-
-
-
-
-
-    
