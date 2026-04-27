@@ -11,14 +11,10 @@ from huggingface_hub import login
 hf_token = os.getenv("HF_TOKEN")
 login(token=hf_token)
 from string import Template
-from datetime import date
-from datetime import timedelta
 from demonstrations import get_examples
 import re 
 from transformers import AutoConfig
-
-today = date.today() 
-yesterday = today - timedelta(days = 1)
+from datetime import date, timedelta, datetime
 
 MT_SYS_MESSAGE = Template("You are a professional translator of scientific documents. Translate the following text from $src_lang into $tgt_lang. The target text must have the same number of paragraphs as the source text. Reply only with the translated text.")
 
@@ -53,8 +49,8 @@ def make_prompt(src, template_string, src_lang, tgt_lang, num_examples=0, tokeni
         return prompt 
     return None 
 
-def make_prompts_for_inference(src_path, src_lang, tgt_lang, template_string, max_len, mode = "0-shot", tokenizer = None, no_sys_message = False):    
-    datefile = f"checked_{src_lang}_{yesterday.day:02d}_{yesterday.month:02d}_{yesterday.year}.json"
+def make_prompts_for_inference(src_path, datestamp, src_lang, tgt_lang, template_string, max_len, mode = "0-shot", tokenizer = None, no_sys_message = False):    
+    datefile = f"checked_{src_lang}_{datestamp}.json"
     with open(Path(src_path) / datefile, "r", encoding="utf-8") as f: 
         data = json.load(f) 
     src_list = []
@@ -85,8 +81,23 @@ def make_prompts_for_inference(src_path, src_lang, tgt_lang, template_string, ma
             status = "standard" if prompt_len <= max_len else "too_long"
             res.append({"docid":docid, "src_abstract":abstract_s, "src_len":src_len, "prompt":prompt, "prompt_len":prompt_len, "status":status})
     return res
-    
+
+def create_timestamp(date): 
+    # offline mode
+    if date: 
+        dt_object = datetime.strptime(date, "%d_%m_%Y")
+        datestamp = dt_object.strftime("%d_%m_%Y")
+        return datestamp 
+    # online mode
+    if date is None: 
+        today = date.today() 
+        yesterday = today - timedelta(days = 1)
+        datestamp = yesterday.strftime("%d_%m_%Y")
+        return datestamp 
+
 def main(tasks: List[dict], models: List[dict] = None):
+    date = os.getenv("DATE")
+    datestamp = create_timestamp(date)
     for model in models:
         model_name = model["name"]
         print(model_name)
@@ -115,13 +126,13 @@ def main(tasks: List[dict], models: List[dict] = None):
                     # make prompt
                     if model.get("chat_template", False):
                         instructions = make_prompts_for_inference(
-                            src_path, src_lang, tgt_lang, template_string = model["template"], max_len = max_len, mode = mode, tokenizer = tokenizer, 
+                            src_path, datestamp, src_lang, tgt_lang, template_string = model["template"], max_len = max_len, mode = mode, tokenizer = tokenizer, 
                             no_sys_message = model.get("no_sys_message", False))
                     else:
                         instructions = make_prompts_for_inference(
-                            src_path, src_lang, tgt_lang, template_string = model["template"], max_len = max_len, mode = mode, tokenizer = tokenizer)
+                            src_path, datestamp, src_lang, tgt_lang, template_string = model["template"], max_len = max_len, mode = mode, tokenizer = tokenizer)
                         
-                    prompt_filename = Path(tgt_path) / f"input_{yesterday.day:02d}_{yesterday.month:02d}_{yesterday.year}.json"
+                    prompt_filename = Path(tgt_path) / f"input_{datestamp}.json"
                     with open(prompt_filename, "w", encoding="utf-8") as f:
                         json.dump(instructions, f, ensure_ascii=False, indent=2)
 

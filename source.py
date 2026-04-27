@@ -62,6 +62,7 @@ def normalise_langid(expected_lang:str, publications:list, langid_threshold=0.8,
     abstract_field = f"{expected_lang}_abstract_s"
     for pub in publications: 
         abstract = pub[abstract_field][0]
+        abstract = abstract.strip()
         abstract = unescape(abstract)
         abstract = normalise(abstract)
         pub[abstract_field][0] = abstract 
