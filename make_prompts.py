@@ -82,22 +82,22 @@ def make_prompts_for_inference(src_path, datestamp, src_lang, tgt_lang, template
             res.append({"docid":docid, "src_abstract":abstract_s, "src_len":src_len, "prompt":prompt, "prompt_len":prompt_len, "status":status})
     return res
 
-def create_timestamp(date): 
+def create_timestamp(data_date): 
     # offline mode
-    if date: 
-        dt_object = datetime.strptime(date, "%d_%m_%Y")
+    if data_date: 
+        dt_object = datetime.strptime(data_date, "%d_%m_%Y")
         datestamp = dt_object.strftime("%d_%m_%Y")
         return datestamp 
     # online mode
-    if date is None: 
+    if data_date is None: 
         today = date.today() 
         yesterday = today - timedelta(days = 1)
         datestamp = yesterday.strftime("%d_%m_%Y")
         return datestamp 
 
 def main(tasks: List[dict], models: List[dict] = None):
-    date = os.getenv("DATE")
-    datestamp = create_timestamp(date)
+    data_date = os.getenv("DATE")
+    datestamp = create_timestamp(data_date)
     for model in models:
         model_name = model["name"]
         print(model_name)
