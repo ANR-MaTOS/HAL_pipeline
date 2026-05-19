@@ -1,0 +1,68 @@
+tasks:
+  - name: sent_split
+    subtasks:
+      - name: en
+        src_lang: en
+        src_path: /home/ptsolaki/scratch/matos_pipeline/source/en/accepted/
+        tgt_path: /home/ptsolaki/scratch/matos_pipeline/sentences/en/
+      - name: fr
+        src_lang: fr
+        src_path: /home/ptsolaki/scratch/matos_pipeline/source/fr/accepted/
+        tgt_path: /home/ptsolaki/scratch/matos_pipeline/sentences/fr/
+  - name: prompt_preparation
+    subtasks: 
+      - name: zero_shot_en_to_fr
+        mode: 0-shot
+        src_lang: en
+        tgt_lang: fr
+        src_path: /home/ptsolaki/scratch/matos_pipeline/sentences/en/
+        tgt_path: /home/ptsolaki/scratch/matos_pipeline/sentence_prompts/${model_name}/0-shot/en_to_fr/
+      - name: zero_shot_fr_to_en
+        mode: 0-shot
+        src_lang: fr
+        tgt_lang: en
+        src_path: /home/ptsolaki/scratch/matos_pipeline/sentences/fr/
+        tgt_path: /home/ptsolaki/scratch/matos_pipeline/sentence_prompts/${model_name}/0-shot/fr_to_en/
+  - name: translation
+    subtasks: 
+      - name: en_to_fr_translation
+        src_path: /home/ptsolaki/scratch/matos_pipeline/sentence_prompts/${model_name}/0-shot/en_to_fr/
+        tgt_path: /home/ptsolaki/scratch/matos_pipeline/sent_target/${model_name}/0-shot/fr
+      - name: fr_to_en_translation
+        src_path: /home/ptsolaki/scratch/matos_pipeline/sentence_prompts/${model_name}/0-shot/fr_to_en/
+        tgt_path: /home/ptsolaki/scratch/matos_pipeline/sent_target/${model_name}/0-shot/en
+
+# we comment some arguments as we use their default values  2024-11-26
+models:
+  - name: EuroLLM-9B-Instruct  
+    template: "${src_lang_full}: ${src_txt}\n${tgt_lang_full}: "
+    llm_arguments:
+      model: utter-project/EuroLLM-9B-Instruct  
+      tokenizer_mode: auto
+      skip_tokenizer_init: false
+      trust_remote_code: true
+      tensor_parallel_size: 1
+      dtype: bfloat16
+
+    sampling_arguments:
+      n: 1
+      # best_of: 1
+      presence_penalty: 0.0
+      frequency_penalty: 0.0
+      repetition_penalty: 1.0
+      temperature: 0.6
+      top_p: 0.9
+      top_k: -1
+      min_p: 0.0
+      seed: null
+      stop: 
+      - "</s>"
+      stop_token_ids: null
+      ignore_eos: false
+      max_tokens: 1024
+      min_tokens: 0
+      logprobs: null
+      prompt_logprobs: null
+      detokenize: true
+      skip_special_tokens: true
+      spaces_between_special_tokens: true
