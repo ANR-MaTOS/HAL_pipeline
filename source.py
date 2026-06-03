@@ -74,6 +74,41 @@ def normalise_langid(expected_lang:str, publications:list, langid_threshold=0.8,
             rejected.append(pub)
     return [accepted, rejected]
 
+def get_len_diff(s1:str, s2:str) -> float:
+    len_diff = None 
+    if isinstance(s1, str) and isinstance(s2, str):
+        len1 = len(s1)
+        len2 = len(s2) 
+        if max(len1, len2) > 0: 
+            relative_diff = abs(len1 - len2) / max(len1, len2)
+            len_diff = relative_diff <= 0.35
+    return len_diff 
+
+def verify_bilingual(publications:list, langid_threshold=0.8, length_threshold=40):
+    def preprocess(abstract:str)->str: 
+        abstract = abstract.strip()
+        abstract = unescape(abstract)
+        abstract = normalise(abstract)
+        return abstract 
+    accepted = []
+    rejected = []
+    for pub in publications: 
+        abstract_en = pub["en_abstract_s"][0]
+        abstract_en = preprocess(abstract_en)
+
+        abstract_fr = pub["fr_abstract_s"][0]
+        abstract_fr = preprocess(abstract_fr)
+
+        len_diff = get_len_diff(abstract_en, abstract_fr) 
+        langid_en_res, langid_en_score = get_lang(abstract_en)
+        langid_fr_res, langid_fr_score = get_lang(abstract_fr) 
+
+        if langid_en_res == "en" and langid_en_score >= langid_threshold and langid_fr_res == "fr" and langid_fr_score >= langid_threshold and len(abstract_en) >= length_threshold and len(abstract_fr) >= length_threshold and len_diff == True:
+            accepted.append(pub)
+        else: 
+            rejected.append(pub)
+    return [accepted, rejected] 
+
 if __name__=="__main__":
     fields = [
         "docid",
@@ -113,7 +148,10 @@ if __name__=="__main__":
 
     en_accepted, en_rejected = normalise_langid("en", only_english)
     fr_accepted, fr_rejected = normalise_langid("fr", only_french)
+    bil_accepted, bil_rejected = verify_bilingual(bilingual)
     save_publications(en_accepted, f"source/en/accepted/checked_en_{datestamp}.json")
     save_publications(en_rejected, f"source/en/rejected/rejected_en_{datestamp}.json")
     save_publications(fr_accepted, f"source/fr/accepted/checked_fr_{datestamp}.json")
     save_publications(fr_rejected, f"source/fr/rejected/rejected_fr_{datestamp}.json")
+    save_publications(bil_accepted, f"bilingual/accepted/checked_{datestamp}.json")
+    save_publications(bil_rejected, f"bilingual/rejected/rejected_{datestamp}.json")
