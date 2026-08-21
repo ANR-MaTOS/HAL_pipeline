@@ -68,10 +68,18 @@ def normalise_langid(expected_lang:str, publications:list, langid_threshold=0.8,
         pub[abstract_field][0] = abstract 
         abstract_len = len(abstract)
         lang, langid_score = get_lang(abstract)
-        if lang == expected_lang and langid_score >= langid_threshold and abstract_len >= length_threshold: 
-            accepted.append(pub)
-        else: 
+        justification = []
+        if lang != expected_lang: 
+            justification.append("Identified language does not match expected language")
+        if langid_score < langid_threshold: 
+            justification.append("LangID score below threshold") 
+        if abstract_len < length_threshold: 
+            justification.append("Abstract length below threshold")
+        if justification: 
+            pub["justification"] = "; ".join(justification)
             rejected.append(pub)
+        else: 
+            accepted.append(pub)
     return [accepted, rejected]
 
 def get_len_diff(s1:str, s2:str) -> float:
