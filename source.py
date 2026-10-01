@@ -2,6 +2,7 @@ from datetime import date, datetime, timedelta
 from html import unescape
 from pathlib import Path
 from source_filtering import get_lang, normalise
+import duckdb 
 import json 
 import requests 
 import os 
@@ -18,8 +19,12 @@ def get_pubs(fields:list, date=None, coll_name="INRIA"):
         datefield = f"[{start} TO {end}]"
     cursor = "*"
     docs = []
-    while True: 
-        url = f"https://api.archives-ouvertes.fr/search/?q=collCode_s:{coll_name}&fq=submittedDate_tdate:{datefield}&fl={",".join(fields)}&rows=100&sort=docid%20asc&cursorMark={cursor}"
+    while True:
+        # requête portail HAL Inria  
+        url = f"https://api.archives-ouvertes.fr/search/?q=collCode_s:{coll_name}&fq=(submittedDate_tdate:{datefield} OR modifiedDate_tdate:{datefield})&fl={",".join(fields)}&rows=100&sort=docid%20asc&cursorMark={cursor}"
+        # requête tout HAL 
+        # url = f"https://api.archives-ouvertes.fr/search/?q=?&fq=submittedDate_tdate:{datefield}&fl={",".join(fields)}&rows=100&sort=docid%20asc&cursorMark={cursor}"
+        print(url)
         res = requests.get(url).json() 
         docs.extend(res["response"]["docs"])
         next_cursor = res["nextCursorMark"]
@@ -70,13 +75,13 @@ def normalise_langid(expected_lang:str, publications:list, langid_threshold=0.8,
         lang, langid_score = get_lang(abstract)
         justification = []
         if lang != expected_lang: 
-            justification.append("Identified language does not match expected language")
+            justification.append(f"Identified language ({lang}) does not match expected language ({expected_lang})")
         if langid_score < langid_threshold: 
-            justification.append("LangID score below threshold") 
+            justification.append(f"LangID score ({langid_score}) below threshold ({langid_threshold})") 
         if abstract_len < length_threshold: 
-            justification.append("Abstract length below threshold")
+            justification.append(f"Abstract length ({abstract_len}) below threshold ({length_threshold})")
         if justification: 
-            pub["justification"] = "; ".join(justification)
+            pub["justification"] = ". ".join(justification)
             rejected.append(pub)
         else: 
             accepted.append(pub)
@@ -146,10 +151,47 @@ if __name__=="__main__":
         yesterday = today - timedelta(days=1)
         datestamp = yesterday.strftime("%d_%m_%Y")
     res = [pub for pub in res if pub.get("docid") and (pub.get("en_abstract_s") or pub.get("fr_abstract_s"))]
-    save_publications(res, f"metadata/inria_{datestamp}.json")
+
+    res_deduplicated = []
+    with duckdb.connect("matos.duckdb") as con: 
+        with duckdb.connect("matos.duckdb") as con: 
+            con.execute(
+                """
+                CREATE TABLE IF NOT EXISTS publications (
+                    docid VARCHAR, 
+                    url VARCHAR, 
+                    domain VARCHAR, 
+                    title VARCHAR, 
+                    src_lang VARCHAR,  
+                    src_abstract VARCHAR, 
+                    tgt_lang VARCHAR,  
+                    tgt_abstract VARCHAR, 
+                    model VARCHAR, 
+                    tgt_langid VARCHAR, 
+                    tgt_langid_score DOUBLE, 
+                    length_ratio DOUBLE, 
+                    cometkiwi DOUBLE, 
+                    publication_date TIMESTAMP, 
+                    processing_date TIMESTAMP, 
+                    notif_ready BOOLEAN, 
+                    logs VARCHAR 
+                )
+                """
+            )
+    for pub in res: 
+        with duckdb.connect("matos.duckdb") as con: 
+            docid = pub["docid"]
+            pub_matches = con.execute("SELECT * from publications WHERE docid = ? and notif_ready = true", [docid]).fetchall()
+            if len(pub_matches) > 0: 
+                print(f"Skipping {docid} because it was found in the database")
+            else: 
+                res_deduplicated.append(pub)
+    print(f"Fetched {len(res)} publications after deduplication")
+
+    save_publications(res_deduplicated, f"metadata/inria_{datestamp}.json")
 
     # filter by abstract fields and save 
-    bilingual, only_english, only_french = filter_abstracts(res)
+    bilingual, only_english, only_french = filter_abstracts(res_deduplicated)
     save_publications(bilingual, f"bilingual/all/{datestamp}.json")
     save_publications(only_english, f"source/en/all/{datestamp}.json")
     save_publications(only_french, f"source/fr/all/{datestamp}.json")
