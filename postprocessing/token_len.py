@@ -1,6 +1,4 @@
 from collections import defaultdict
-from datetime import date
-from datetime import timedelta
 from jsonargparse import CLI
 from pathlib import Path
 from transformers import AutoTokenizer 
@@ -12,30 +10,44 @@ import re
 import string 
 import torch 
 from huggingface_hub import login
+from datetime import date, timedelta, datetime
+
 hf_token = os.getenv("HF_TOKEN")
 if not hf_token:
     raise EnvironmentError("HF_TOKEN environment variable is not set.")
 login(token=hf_token)
 
-tokenizer = AutoTokenizer.from_pretrained("utter-project/EuroLLM-9B-Instruct")
-print("Tokenizer loaded")
+# tokenizer = AutoTokenizer.from_pretrained("utter-project/EuroLLM-22B-Instruct")
+# print("Tokenizer loaded")
 
-def get_length(txt):
+def create_timestamp(data_date): 
+    # offline mode
+    if data_date: 
+        dt_object = datetime.strptime(data_date, "%d_%m_%Y")
+        datestamp = dt_object.strftime("%d_%m_%Y")
+        return datestamp 
+    # online mode
+    if data_date is None: 
+        today = date.today() 
+        yesterday = today - timedelta(days = 1)
+        datestamp = yesterday.strftime("%d_%m_%Y")
+        return datestamp 
+
+def get_length(tokenizer, txt):
     token_len = None 
     if txt and isinstance(txt, str):
         tokens = tokenizer.encode(txt)
         token_len = len(tokens)
     return token_len 
 
-def get_translations(filepath):
+def get_translations(filepath, datestamp):
     translations = dict() 
-    translation_files = glob.glob(filepath + "/output*.json")
-    for f in translation_files: 
-        trans = json.load(open(f, "r", encoding="utf-8")) 
-        trans = {entry["docid"]: entry for entry in trans}
-        translations.update(trans)
-    return translations 
+    translation_f = Path(filepath) / f"output_{datestamp}.json"
+    translations = json.load(open(translation_f, "r", encoding="utf-8")) 
+    translations = {entry["docid"]: entry for entry in translations}
+    return translations
 
+"""
 def get_target_txt(mode, entry): 
     if mode.startswith("doc"): 
         target_txt =  entry["tgt_abstract"]
@@ -46,65 +58,45 @@ def get_target_txt(mode, entry):
     else: 
         target_txt = None 
     return target_txt 
+""" 
 
-def main(tasks: List[dict]):
+def main(tasks: List[dict], models: List[dict] = None):
     print("Token counting begins")
     languages = ["en", "fr"]
     for task in tasks: 
-        if task.get("name") == "postprocessing":           
+        if task.get("name") == "postprocessing":        
             for subtask in task.get("subtasks",{}): 
                 if subtask.get("name") == "length_ratio": 
                     print("Length ratio calculation")
-                    data = dict() 
-                    for lang in languages: 
-                        exp_lang = lang 
-                        
-                        doc0_path = subtask["doc0_path"]
-                        doc0_path = string.Template(doc0_path)
-                        doc0_path = doc0_path.safe_substitute(lang = exp_lang)
-                        doc0_translations = get_translations(doc0_path)
+                    for model in models: 
+                        model_name = model["name"] 
+                        tokenizer = AutoTokenizer.from_pretrained(model["llm_arguments"]["model"])   
+                        data = dict() 
+                        data_date = os.getenv("DATE")
+                        datestamp = create_timestamp(data_date)
+                        for lang in languages: 
+                            translation_path = task.get("translation_path")
+                            postprocessed_path = task.get("postprocessed_path") 
+                            expected_lang = lang 
+                            
+                            translation_path = string.Template(translation_path).safe_substitute(model_name = model_name, lang = expected_lang)
+                            translations = get_translations(translation_path, datestamp)
 
-                        doc1_path = subtask["doc1_path"]
-                        doc1_path = string.Template(doc1_path)
-                        doc1_path = doc1_path.safe_substitute(lang = exp_lang)
-                        doc1_translations = get_translations(doc1_path)
+                            postprocessed_path = string.Template(postprocessed_path)
+                            postprocessed_path = postprocessed_path.safe_substitute(model_name = model_name, lang = expected_lang)
+                            Path(postprocessed_path).mkdir(exist_ok=True, parents=True)
 
-                        doc2_path = subtask["doc2_path"]
-                        doc2_path = string.Template(doc2_path)
-                        doc2_path = doc2_path.safe_substitute(lang = exp_lang)
-                        doc2_translations = get_translations(doc2_path)
+                            # translations = dict() 
+                            for docid, entry in translations.items(): 
+                                source_len = entry.get("src_len")
+                                target_len = get_length(tokenizer, entry["tgt_abstract"])
+                                if source_len and target_len: 
+                                    length_ratio = target_len / source_len 
+                                    entry["length_ratio"] = length_ratio 
 
-                        seg_path = subtask["segment_path"]
-                        seg_path = string.Template(seg_path)
-                        seg_path = seg_path.safe_substitute(lang = exp_lang)
-                        seg_translations = get_translations(seg_path)
-
-                        sent_path = subtask["sent_path"]
-                        sent_path = string.Template(sent_path)
-                        sent_path = sent_path.safe_substitute(lang = exp_lang)
-                        sent_translations = get_translations(sent_path)
-
-                        output_path = subtask["postprocessed_path"]
-                        output_path = string.Template(output_path)
-                        output_path = output_path.safe_substitute(lang = exp_lang)
-
-                        translations = dict() 
-                        modes = {"doc_0shot":doc0_translations, "doc_1shot":doc1_translations, "doc_2shot":doc2_translations, "segment_0shot":seg_translations, "sentence_0shot":sent_translations}
-                        # only retain abstracts that have been translated in all modes 
-                        for docid in doc0_translations.keys(): 
-                            if (docid in doc1_translations.keys()) and (docid in doc2_translations.keys()) and (docid in seg_translations.keys()) and (docid in sent_translations.keys()): 
-                                translations[docid] = defaultdict(dict)
-                                translations[docid]["source"] = doc0_translations[docid]["src_abstract"]
-                                translations[docid]["source_len"] = doc0_translations[docid]["src_len"]
-                                for k, v in modes.items(): 
-                                    target_text = get_target_txt(k, v[docid])
-                                    translations[docid][k]["target_txt"] = target_text 
-                                    target_len = get_length(target_text)
-                                    translations[docid][k]["target_len"] = target_len
-                                    translations[docid][k]["length_ratio"] = target_len / doc0_translations[docid]["src_len"]
-                        postprocessed_f = Path(output_path) / "postprocessed.json"
-                        with open(postprocessed_f, "w", encoding="utf-8") as output_f: 
-                            json.dump(translations, output_f, ensure_ascii=False, indent=2)
+                            postprocessed_f = Path(postprocessed_path) / f"postprocessed_{datestamp}.json"
+                            with open(postprocessed_f, "w", encoding="utf-8") as output_f: 
+                                json.dump(translations, output_f, ensure_ascii=False, indent=2)
 
 if __name__=="__main__":
     CLI(main, description=__doc__)
