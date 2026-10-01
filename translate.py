@@ -41,62 +41,68 @@ def main(tasks: List[dict], models: List[dict] = None):
         sampling_params = SamplingParams(**model["sampling_arguments"])  
 
         for task in tasks:
-            if task.get("name") == "mt":             
+            if task.get("name") == "translation":             
                 for subtask in task.get("subtasks",{}):
-                    modes = subtask["modes"]
                     src_lang = subtask["src_lang"]
                     tgt_lang = subtask["tgt_lang"]
-                    for mode in modes: 
-                        print(f"{src_lang}>{tgt_lang} {mode} translation")
+                
+                    print(f"{src_lang}>{tgt_lang} translation")
 
-                        src_path = subtask["src_path"]
-                        src_path = Template(src_path)
-                        src_path = src_path.safe_substitute(model_name=model_name, mode=mode)
-                        input_datefile = f"input_{datestamp}.json"
-                        src_file = Path(src_path) / input_datefile 
-                        print(f"Source file = {src_file}")
+                    src_path = subtask["src_path"]
+                    src_path = Template(src_path)
+                    src_path = src_path.safe_substitute(model_name=model_name)
+                    input_datefile = f"input_{datestamp}.json"
+                    src_file = Path(src_path) / input_datefile 
+                    print(f"Source file = {src_file}")
 
-                        tgt_path = subtask["tgt_path"]
-                        tgt_path = Template(tgt_path)
-                        tgt_path = tgt_path.safe_substitute(model_name=model_name, mode=mode)
-                        Path(tgt_path).mkdir(parents=True, exist_ok=True)
-                        out_datefile = f"output_{datestamp}.json"
-                        tgt_file = Path(tgt_path) / out_datefile
-                        print(f"Target file = {tgt_file}")
+                    tgt_path = subtask["tgt_path"]
+                    tgt_path = Template(tgt_path)
+                    tgt_path = tgt_path.safe_substitute(model_name=model_name)
+                    Path(tgt_path).mkdir(parents=True, exist_ok=True)
+                    out_datefile = f"output_{datestamp}.json"
+                    tgt_file = Path(tgt_path) / out_datefile
+                    print(f"Target file = {tgt_file}")
+                
+                    with open(src_file, "r", encoding="utf-8") as f:
+                        data = json.load(f)
                     
-                        with open(src_file, "r", encoding="utf-8") as f:
-                            data = json.load(f)
+                    # prepare input
+                    mt_content = []                    
+                    for pub in data:
+                        if pub["status"] == "standard":
+                            entry = dict() 
+                            entry["docid"] = pub["docid"]
+                            entry["url"] = pub["url"]
+                            entry["domain"] = pub["domain"]
+                            entry["title"] = pub["title"]
+                            entry["src_abstract"] = pub["src_abstract"]
+                            entry["src_len"] = pub["src_len"]
+                            entry["prompt"] = pub["prompt"]
+                            entry["prompt_len"] = pub["prompt_len"]
+                            mt_content.append(entry)
+                        else: 
+                            print(f"{pub['docid']} left out because the prompt is too long")     
+
+                    print(f"{len(mt_content)} prompts loaded")                                        
+                    instructions = [entry["prompt"] for entry in mt_content]
+                
+                    # generate 
+                    t0 = time.time()
+                    outputs = llm.generate(instructions, sampling_params)
+                    print("Generation finished in", time.time() - t0, "seconds")
+
+                    # store
+                    output_texts = [output.outputs[0].text for output in outputs]
+                    assert len(mt_content) == len(output_texts) 
+                    for mt_entry, output in zip(mt_content, output_texts):
+                        mt_entry["tgt_abstract"] = output 
+
+                    print(f"{len(mt_content)} abstracts were translated")
+
+                    print(tgt_file)
                         
-                        # prepare input
-                        mt_content = []                    
-                        for pub in data:
-                            if pub["status"] == "standard":
-                                mt_input = dict() 
-                                mt_input["docid"] = pub["docid"]
-                                mt_input["src_abstract"] = pub["src_abstract"]
-                                mt_input["src_len"] = pub["src_len"]
-                                mt_input["prompt"] = pub["prompt"]
-                                mt_input["prompt_len"] = pub["prompt_len"]
-                                mt_content.append(mt_input)
-                            else: 
-                                print(f"{pub['docid']} left out because the prompt is too long")     
-
-                        print(f"{len(mt_content)} prompts loaded")                                        
-                        instructions = [entry["prompt"] for entry in mt_content]
-                    
-                        # generate 
-                        t0 = time.time()
-                        outputs = llm.generate(instructions, sampling_params)
-                        print("Generation finished in", time.time() - t0, "seconds")
-
-                        # store
-                        output_texts = [output.outputs[0].text for output in outputs]
-                        assert len(mt_content) == len(output_texts) 
-                        for mt_entry, output in zip(mt_content, output_texts):
-                            mt_entry["tgt_abstract"] = output 
-                            
-                        with open(tgt_file, "w", encoding="utf-8") as f:
-                            json.dump(mt_content, f, ensure_ascii=False, indent=2)
+                    with open(tgt_file, "w", encoding="utf-8") as f:
+                        json.dump(mt_content, f, ensure_ascii=False, indent=2)
 
 if __name__=="__main__":
     CLI(main,description=__doc__)
