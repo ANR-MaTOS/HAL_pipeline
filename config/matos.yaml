@@ -1,0 +1,74 @@
+tasks: 
+  - name: prompt_preparation
+    subtasks: 
+      - glossary: True  
+        few_shot: 1 
+        src_lang: en 
+        tgt_lang: fr 
+        src_path: "/home/ptsolaki/scratch/matos_prod/source/en/accepted/"
+        tgt_path: "/home/ptsolaki/scratch/matos_prod/prompts/${model_name}/en_to_fr/"
+      - glossary: True 
+        few_shot: 1 
+        src_lang: fr 
+        tgt_lang: en
+        src_path: "/home/ptsolaki/scratch/matos_prod/source/fr/accepted/"
+        tgt_path: "/home/ptsolaki/scratch/matos_prod/prompts/${model_name}/fr_to_en/"
+  - name: translation 
+    subtasks: 
+      - src_lang: en 
+        tgt_lang: fr
+        src_path: "/home/ptsolaki/scratch/matos_prod/prompts/${model_name}/en_to_fr/"
+        tgt_path: "/home/ptsolaki/scratch/matos_prod/target/${model_name}/fr/"
+      - src_lang: fr
+        tgt_lang: en
+        src_path: "/home/ptsolaki/scratch/matos_prod/prompts/${model_name}/fr_to_en/"
+        tgt_path: "/home/ptsolaki/scratch/matos_prod/target/${model_name}/en"
+  - name: postprocessing
+    translation_path: "/home/ptsolaki/scratch/matos_prod/target/${model_name}/${lang}"
+    postprocessed_path: "/home/ptsolaki/scratch/matos_prod/postprocessed/${model_name}/all/${lang}/"
+    subtasks: 
+      - name: length_ratio
+      - name: langid
+      - name: alignment 
+      - name: mtqe 
+      - name: filter
+        length_ratio_threshold: 1.35 
+        langid_threshold: 0.8 
+        mtqe_threshold: 0.7 
+        accepted_path: "/home/ptsolaki/scratch/matos_prod/postprocessed/${model_name}/accepted/${lang}"
+        rejected_path: "/home/ptsolaki/scratch/matos_prod/postprocessed/${model_name}/rejected/${lang}"
+
+# we comment some arguments as we use their default values  2024-11-26
+models:
+  - name: EuroLLM-22B-Instruct  
+    template: "${glossary}\n${src_lang_full}: ${src_txt}\n${tgt_lang_full}:"
+    llm_arguments:
+      model: utter-project/EuroLLM-22B-Instruct-2512  
+      tokenizer_mode: auto
+      skip_tokenizer_init: false
+      trust_remote_code: true
+      tensor_parallel_size: 1
+      dtype: bfloat16
+
+    sampling_arguments:
+      n: 1
+      # best_of: 1
+      presence_penalty: 0.0
+      frequency_penalty: 0.0
+      repetition_penalty: 1.0
+      temperature: 0.6
+      top_p: 0.9
+      top_k: -1
+      min_p: 0.0
+      seed: null
+      stop: 
+      - "</s>"
+      stop_token_ids: null
+      ignore_eos: false
+      max_tokens: 1024
+      min_tokens: 0
+      logprobs: null
+      prompt_logprobs: null
+      detokenize: true
+      skip_special_tokens: true
+      spaces_between_special_tokens: true
